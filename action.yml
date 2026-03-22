@@ -1,0 +1,143 @@
+name: verified-bot-commit
+description: GitHub Action for creating signed and verified bot commits
+author: siiway
+
+branding:
+  icon: check
+  color: green
+
+inputs:
+  repository:
+    description: The target repository
+    required: false
+    default: ${{ github.repository }}
+  ref:
+    description: The ref to push the commit to
+    required: false
+    default: ${{ github.ref }}
+  files:
+    description: Files/Glob patterns to include with the commit
+    required: true
+  message:
+    description: Message for the commit
+    required: false
+  message-file:
+    description: File to use for the commit message
+    required: false
+  auto-stage:
+    description: Stage all changed files for committing
+    required: false
+    default: 'true'
+  update-local:
+    description: Update local branch after committing
+    required: false
+    default: 'true'
+  force-push:
+    description: Force push the commit
+    required: false
+    default: 'false'
+  if-no-commit:
+    description: Set the behavior when no commit is made
+    required: false
+    default: 'warning'
+  allow-empty-commit:
+    description: Allow creating an empty commit if there are no changes
+    required: false
+    default: 'false'
+  no-throttle:
+    description: Disable the throttling mechanism during requests
+    required: false
+    default: 'false'
+  no-retry:
+    description: Disable the retry mechanism during requests
+    required: false
+    default: 'false'
+  max-retries:
+    description: Number of retries to attempt if a request fails
+    required: false
+    default: '1'
+  follow-symlinks:
+    description: Follow symbolic links when globbing files
+    required: false
+    default: 'true'
+  workspace:
+    description: Directory containing checked out files
+    required: false
+    default: ${{ github.workspace }}
+  api-url:
+    description: Base URL for the GitHub API
+    required: false
+    default: ${{ github.api_url }}
+  token:
+    description: GitHub Token for REST API access
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  blobs:
+    description: A JSON list of blob SHAs within the tree
+    value: ${{ steps.run.outputs.blobs }}
+  tree:
+    description: SHA of the underlying tree for the commit
+    value: ${{ steps.run.outputs.tree }}
+  commit:
+    description: SHA of the commit itself
+    value: ${{ steps.run.outputs.commit }}
+  ref:
+    description: SHA for the ref that was updated (same as commit)
+    value: ${{ steps.run.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download verified-bot-commit
+      shell: bash
+      run: |
+        VERSION="v0.1.0"
+        BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
+
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)    TARGET="x86_64-unknown-linux-gnu" ;;
+          Linux-ARM64)  TARGET="aarch64-unknown-linux-gnu" ;;
+          macOS-X64)    TARGET="x86_64-apple-darwin" ;;
+          macOS-ARM64)  TARGET="aarch64-apple-darwin" ;;
+          Windows-X64)  TARGET="x86_64-pc-windows-msvc" ;;
+          *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
+        esac
+
+        ARCHIVE="verified_bot_commit-${TARGET}"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o archive.zip
+          unzip -o archive.zip -d "$RUNNER_TEMP"
+          BINARY="$RUNNER_TEMP/verified_bot_commit.exe"
+        else
+          curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o archive.tar.gz
+          tar -xzf archive.tar.gz -C "$RUNNER_TEMP"
+          BINARY="$RUNNER_TEMP/verified_bot_commit"
+          chmod +x "$BINARY"
+        fi
+
+        echo "VERIFIED_BOT_COMMIT_BIN=$BINARY" >> "$GITHUB_ENV"
+
+    - name: Run verified-bot-commit
+      id: run
+      shell: bash
+      env:
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_MESSAGE: ${{ inputs.message }}
+        INPUT_MESSAGE_FILE: ${{ inputs.message-file }}
+        INPUT_AUTO_STAGE: ${{ inputs.auto-stage }}
+        INPUT_UPDATE_LOCAL: ${{ inputs.update-local }}
+        INPUT_FORCE_PUSH: ${{ inputs.force-push }}
+        INPUT_IF_NO_COMMIT: ${{ inputs.if-no-commit }}
+        INPUT_ALLOW_EMPTY_COMMIT: ${{ inputs.allow-empty-commit }}
+        INPUT_NO_THROTTLE: ${{ inputs.no-throttle }}
+        INPUT_NO_RETRY: ${{ inputs.no-retry }}
+        INPUT_MAX_RETRIES: ${{ inputs.max-retries }}
+        INPUT_FOLLOW_SYMLINKS: ${{ inputs.follow-symlinks }}
+        INPUT_WORKSPACE: ${{ inputs.workspace }}
+        INPUT_API_URL: ${{ inputs.api-url }}
+        INPUT_TOKEN: ${{ inputs.token }}
+      run: "$VERIFIED_BOT_COMMIT_BIN"
