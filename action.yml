@@ -1,4 +1,4 @@
-name: verified-bot-commit
+name: verified-bot-commit-rs
 description: GitHub Action for creating signed and verified bot commits
 author: siiway
 
@@ -90,54 +90,54 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Download verified-bot-commit
-      shell: bash
-      run: |
-        VERSION="v0.1.0"
-        BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
+  - name: Download verified-bot-commit
+    shell: bash
+    run: |
+      VERSION="v0.1.0"
+      BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
 
-        case "$RUNNER_OS-$RUNNER_ARCH" in
-          Linux-X64)    TARGET="x86_64-unknown-linux-gnu" ;;
-          Linux-ARM64)  TARGET="aarch64-unknown-linux-gnu" ;;
-          macOS-X64)    TARGET="x86_64-apple-darwin" ;;
-          macOS-ARM64)  TARGET="aarch64-apple-darwin" ;;
-          Windows-X64)  TARGET="x86_64-pc-windows-msvc" ;;
-          *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
-        esac
+      case "$RUNNER_OS-$RUNNER_ARCH" in
+        Linux-X64)    TARGET="x86_64-unknown-linux-gnu" ;;
+        Linux-ARM64)  TARGET="aarch64-unknown-linux-gnu" ;;
+        macOS-X64)    TARGET="x86_64-apple-darwin" ;;
+        macOS-ARM64)  TARGET="aarch64-apple-darwin" ;;
+        Windows-X64)  TARGET="x86_64-pc-windows-msvc" ;;
+        *) echo "::error::Unsupported platform: $RUNNER_OS-$RUNNER_ARCH" && exit 1 ;;
+      esac
 
-        ARCHIVE="verified_bot_commit-${TARGET}"
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o archive.zip
-          unzip -o archive.zip -d "$RUNNER_TEMP"
-          BINARY="$RUNNER_TEMP/verified_bot_commit.exe"
-        else
-          curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o archive.tar.gz
-          tar -xzf archive.tar.gz -C "$RUNNER_TEMP"
-          BINARY="$RUNNER_TEMP/verified_bot_commit"
-          chmod +x "$BINARY"
-        fi
+      ARCHIVE="verified_bot_commit-${TARGET}"
+      if [ "$RUNNER_OS" = "Windows" ]; then
+        curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o archive.zip
+        unzip -o archive.zip -d "$RUNNER_TEMP"
+        BINARY="$RUNNER_TEMP/verified_bot_commit.exe"
+      else
+        curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o archive.tar.gz
+        tar -xzf archive.tar.gz -C "$RUNNER_TEMP"
+        BINARY="$RUNNER_TEMP/verified_bot_commit"
+        chmod +x "$BINARY"
+      fi
 
-        echo "VERIFIED_BOT_COMMIT_BIN=$BINARY" >> "$GITHUB_ENV"
+      echo "VERIFIED_BOT_COMMIT_BIN=$BINARY" >> "$GITHUB_ENV"
 
-    - name: Run verified-bot-commit
-      id: run
-      shell: bash
-      env:
-        INPUT_REPOSITORY: ${{ inputs.repository }}
-        INPUT_REF: ${{ inputs.ref }}
-        INPUT_FILES: ${{ inputs.files }}
-        INPUT_MESSAGE: ${{ inputs.message }}
-        INPUT_MESSAGE_FILE: ${{ inputs.message-file }}
-        INPUT_AUTO_STAGE: ${{ inputs.auto-stage }}
-        INPUT_UPDATE_LOCAL: ${{ inputs.update-local }}
-        INPUT_FORCE_PUSH: ${{ inputs.force-push }}
-        INPUT_IF_NO_COMMIT: ${{ inputs.if-no-commit }}
-        INPUT_ALLOW_EMPTY_COMMIT: ${{ inputs.allow-empty-commit }}
-        INPUT_NO_THROTTLE: ${{ inputs.no-throttle }}
-        INPUT_NO_RETRY: ${{ inputs.no-retry }}
-        INPUT_MAX_RETRIES: ${{ inputs.max-retries }}
-        INPUT_FOLLOW_SYMLINKS: ${{ inputs.follow-symlinks }}
-        INPUT_WORKSPACE: ${{ inputs.workspace }}
-        INPUT_API_URL: ${{ inputs.api-url }}
-        INPUT_TOKEN: ${{ inputs.token }}
-      run: "$VERIFIED_BOT_COMMIT_BIN"
+  - name: Run verified-bot-commit
+    id: run
+    shell: bash
+    env:
+      INPUT_REPOSITORY: ${{ inputs.repository }}
+      INPUT_REF: ${{ inputs.ref }}
+      INPUT_FILES: ${{ inputs.files }}
+      INPUT_MESSAGE: ${{ inputs.message }}
+      INPUT_MESSAGE_FILE: ${{ inputs.message-file }}
+      INPUT_AUTO_STAGE: ${{ inputs.auto-stage }}
+      INPUT_UPDATE_LOCAL: ${{ inputs.update-local }}
+      INPUT_FORCE_PUSH: ${{ inputs.force-push }}
+      INPUT_IF_NO_COMMIT: ${{ inputs.if-no-commit }}
+      INPUT_ALLOW_EMPTY_COMMIT: ${{ inputs.allow-empty-commit }}
+      INPUT_NO_THROTTLE: ${{ inputs.no-throttle }}
+      INPUT_NO_RETRY: ${{ inputs.no-retry }}
+      INPUT_MAX_RETRIES: ${{ inputs.max-retries }}
+      INPUT_FOLLOW_SYMLINKS: ${{ inputs.follow-symlinks }}
+      INPUT_WORKSPACE: ${{ inputs.workspace }}
+      INPUT_API_URL: ${{ inputs.api-url }}
+      INPUT_TOKEN: ${{ inputs.token }}
+    run: "$VERIFIED_BOT_COMMIT_BIN"
