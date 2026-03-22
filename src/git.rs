@@ -225,17 +225,16 @@ impl GitHubApi {
                     let body = resp.text().await.unwrap_or_default();
 
                     // Handle rate limiting
-                    if status.as_u16() == 429 || status.as_u16() == 403 {
-                        if attempt < self.max_retries {
-                            eprintln!(
-                                "::warning::Rate limited (attempt {}/{}), retrying...",
-                                attempt + 1,
-                                self.max_retries
-                            );
-                            tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt)))
-                                .await;
-                            continue;
-                        }
+                    if (status.as_u16() == 429 || status.as_u16() == 403)
+                        && attempt < self.max_retries
+                    {
+                        eprintln!(
+                            "::warning::Rate limited (attempt {}/{}), retrying...",
+                            attempt + 1,
+                            self.max_retries
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
+                        continue;
                     }
 
                     last_err = format!("HTTP {status}: {body}");
