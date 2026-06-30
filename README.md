@@ -53,8 +53,8 @@ were not committed by the Action will be left staged.
 
 | Name                 | Type    | Description                                            | Default                    |
 | -------------------- | ------- | ------------------------------------------------------ | -------------------------- |
-| `repository`         | String  | The target repository [1]                              | `${{ github.repository }}` |
-| `ref`                | String  | The ref to push the commit to                          | `${{ github.ref }}`        |
+| `repository`         | String  | The target repository [1]                              | `${{ github.event.pull_request.head.repo.full_name || github.repository }}` |
+| `ref`                | String  | The ref to push the commit to                          | `${{ github.head_ref || github.ref }}` |
 | `files`              | List    | Files/[Glob] patterns to include with the commit [2]   | _required_                 |
 | `message`            | String  | Message for the commit [3]                             | _optional_                 |
 | `message-file`       | String  | File to use for the commit message [3]                 | _optional_                 |
@@ -72,7 +72,15 @@ were not committed by the Action will be left staged.
 | `token`              | String  | GitHub Token for REST API access [6]                   | `${{ github.token }}`      |
 
 > 1. Must be in the format `owner/repo-name`. To push to other repositories you
->    will _need_ to use a GitHub App Token.
+>    will _need_ to use a GitHub App Token. On `pull_request` events the default
+>    points at the head repository (`github.event.pull_request.head.repo.full_name`)
+>    so the action targets the repo that actually contains the branch. For PRs
+>    opened from a fork, the default `GITHUB_TOKEN` cannot push to the fork —
+>    **even when "Allow edits by maintainers" is enabled**, since that setting
+>    only delegates push access to maintainer _users_, not to the Actions
+>    `GITHUB_TOKEN`. To commit back to a fork you need a GitHub App Token or a
+>    maintainer's PAT with write access to the head repo (and note that "Allow
+>    edits by maintainers" does not work for forks owned by an organization).
 > 2. Files within your `.gitignore` will not be included. You can also negate
 >    any files by prefixing it with `!`
 > 3. You must include either `message` or `message-file` (which takes priority).

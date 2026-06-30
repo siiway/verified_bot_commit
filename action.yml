@@ -10,11 +10,16 @@ inputs:
   repository:
     description: The target repository
     required: false
-    default: ${{ github.repository }}
+    # For pull_request events the head branch lives in the head repository,
+    # which may differ from `github.repository` (the base repo) for fork PRs.
+    # Default to the head repo so cross-repo PRs target the correct repository.
+    default: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   ref:
     description: The ref to push the commit to
     required: false
-    default: ${{ github.ref }}
+    # For pull_request events `github.ref` is `refs/pull/<n>/merge`, which is not
+    # a writable branch. Use the head branch name when available instead.
+    default: ${{ github.head_ref || github.ref }}
   files:
     description: Files/Glob patterns to include with the commit
     required: true
@@ -93,7 +98,7 @@ runs:
   - name: Download verified-bot-commit
     shell: bash
     run: |
-      VERSION="v0.1.0"
+      VERSION="v0.1.1"
       BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
 
       case "$RUNNER_OS-$RUNNER_ARCH" in
