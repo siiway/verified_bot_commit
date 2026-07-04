@@ -114,6 +114,12 @@ you a nicely signed/verified commit plus all the benefits that using your own
 token provides, such as your own bot's name, writing to protected tags/branches,
 writing to other repositories, etc.
 
+## Versioning
+
+- `v0` → latest stable v0 release
+- `v0.1` → latest v0.1.x release
+- `v0.1.1` → pinned release
+
 ## Examples
 
 ### Commit all changes
