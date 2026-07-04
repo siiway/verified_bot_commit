@@ -65,6 +65,10 @@ inputs:
     description: Follow symbolic links when globbing files
     required: false
     default: 'true'
+  skip-on-no-permission:
+    description: Skip (instead of failing) when the token has no permission to push to the target ref
+    required: false
+    default: 'false'
   workspace:
     description: Directory containing checked out files
     required: false
@@ -91,6 +95,12 @@ outputs:
   ref:
     description: SHA for the ref that was updated (same as commit)
     value: ${{ steps.run.outputs.ref }}
+  skipped:
+    description: Whether the ref update was skipped instead of committed/pushed
+    value: ${{ steps.run.outputs.skipped }}
+  skip-reason:
+    description: Reason the ref update was skipped, if any (e.g. `no-permission`)
+    value: ${{ steps.run.outputs.skip-reason }}
 
 runs:
   using: composite
@@ -98,7 +108,7 @@ runs:
   - name: Download verified-bot-commit
     shell: bash
     run: |
-      VERSION="v0.1.1"
+      VERSION="v0.2.0"
       BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
 
       case "$RUNNER_OS-$RUNNER_ARCH" in
@@ -142,6 +152,7 @@ runs:
       INPUT_NO_RETRY: ${{ inputs.no-retry }}
       INPUT_MAX_RETRIES: ${{ inputs.max-retries }}
       INPUT_FOLLOW_SYMLINKS: ${{ inputs.follow-symlinks }}
+      INPUT_SKIP_ON_NO_PERMISSION: ${{ inputs.skip-on-no-permission }}
       INPUT_WORKSPACE: ${{ inputs.workspace }}
       INPUT_API_URL: ${{ inputs.api-url }}
       INPUT_TOKEN: ${{ inputs.token }}

@@ -6,6 +6,48 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+/// An error returned by the GitHub API layer.
+///
+/// Carries the HTTP status code (when the failure came from an HTTP response)
+/// so callers can distinguish permission problems from other failures.
+#[derive(Debug, Clone)]
+pub struct ApiError {
+    pub status: Option<u16>,
+    pub message: String,
+}
+
+impl ApiError {
+    /// Build an error that is not tied to an HTTP status (e.g. a parse error).
+    pub fn other(message: impl Into<String>) -> Self {
+        Self {
+            status: None,
+            message: message.into(),
+        }
+    }
+
+    /// Whether this error indicates the token is not allowed to perform the
+    /// operation (e.g. pushing to a branch it cannot write to).
+    ///
+    /// GitHub returns `403 Forbidden` for insufficient permissions and often
+    /// `404 Not Found` to avoid disclosing the existence of a resource the
+    /// token cannot access (common for fork repositories).
+    pub fn is_permission_error(&self) -> bool {
+        matches!(self.status, Some(403) | Some(404))
+    }
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl From<ApiError> for String {
+    fn from(err: ApiError) -> Self {
+        err.message
+    }
+}
+
 /// Git file modes
 #[derive(Debug, Clone, Serialize)]
 #[allow(dead_code)]
@@ -172,7 +214,7 @@ impl GitHubApi {
     }
 
     /// Make a GET request with retry logic.
-    async fn get(&self, path: &str) -> Result<reqwest::Response, String> {
+    async fn get(&self, path: &str) -> Result<reqwest::Response, ApiError> {
         let url = format!(
             "{}/repos/{}/{}/{}",
             self.base_url, self.owner, self.repo, path
@@ -181,7 +223,7 @@ impl GitHubApi {
     }
 
     /// Make a POST request with retry logic.
-    async fn post(&self, path: &str, body: &impl Serialize) -> Result<reqwest::Response, String> {
+    async fn post(&self, path: &str, body: &impl Serialize) -> Result<reqwest::Response, ApiError> {
         let url = format!(
             "{}/repos/{}/{}/{}",
             self.base_url, self.owner, self.repo, path
@@ -191,7 +233,11 @@ impl GitHubApi {
     }
 
     /// Make a PATCH request with retry logic.
-    async fn patch(&self, path: &str, body: &impl Serialize) -> Result<reqwest::Response, String> {
+    async fn patch(
+        &self,
+        path: &str,
+        body: &impl Serialize,
+    ) -> Result<reqwest::Response, ApiError> {
         let url = format!(
             "{}/repos/{}/{}/{}",
             self.base_url, self.owner, self.repo, path
@@ -203,13 +249,13 @@ impl GitHubApi {
     async fn request_with_retry(
         &self,
         builder: reqwest::RequestBuilder,
-    ) -> Result<reqwest::Response, String> {
-        let mut last_err = String::new();
+    ) -> Result<reqwest::Response, ApiError> {
+        let mut last_err = ApiError::other("request was never attempted");
 
         for attempt in 0..=self.max_retries {
             let request = builder
                 .try_clone()
-                .ok_or("Failed to clone request")?
+                .ok_or_else(|| ApiError::other("Failed to clone request"))?
                 .header("Authorization", format!("Bearer {}", self.token))
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "verified-bot-commit")
@@ -237,7 +283,10 @@ impl GitHubApi {
                         continue;
                     }
 
-                    last_err = format!("HTTP {status}: {body}");
+                    last_err = ApiError {
+                        status: Some(status.as_u16()),
+                        message: format!("HTTP {status}: {body}"),
+                    };
                     if attempt < self.max_retries {
                         eprintln!(
                             "::warning::Request failed (attempt {}/{}): {last_err}",
@@ -249,7 +298,7 @@ impl GitHubApi {
                     }
                 }
                 Err(e) => {
-                    last_err = e.to_string();
+                    last_err = ApiError::other(e.to_string());
                     if attempt < self.max_retries {
                         eprintln!(
                             "::warning::Request error (attempt {}/{}): {last_err}",
@@ -295,11 +344,11 @@ impl GitHubApi {
         file: &str,
         workspace: &str,
         follow_symlinks: bool,
-    ) -> Result<GitBlob, String> {
+    ) -> Result<GitBlob, ApiError> {
         let location = Path::new(workspace).join(file);
-        let mode = get_file_mode(&location, follow_symlinks)?;
+        let mode = get_file_mode(&location, follow_symlinks).map_err(ApiError::other)?;
         let content = fs::read(&location)
-            .map_err(|e| format!("Failed to read {}: {e}", location.display()))?;
+            .map_err(|e| ApiError::other(format!("Failed to read {}: {e}", location.display())))?;
         let encoded = BASE64.encode(&content);
 
         let body = serde_json::json!({
@@ -308,7 +357,10 @@ impl GitHubApi {
         });
 
         let resp = self.post("git/blobs", &body).await?;
-        let data: ShaResponse = resp.json().await.map_err(|e| e.to_string())?;
+        let data: ShaResponse = resp
+            .json()
+            .await
+            .map_err(|e| ApiError::other(e.to_string()))?;
 
         Ok(GitBlob {
             path: file.to_string(),
@@ -319,14 +371,21 @@ impl GitHubApi {
     }
 
     /// Create a tree from blobs.
-    pub async fn create_tree(&self, blobs: &[GitBlob], base_tree: &str) -> Result<String, String> {
+    pub async fn create_tree(
+        &self,
+        blobs: &[GitBlob],
+        base_tree: &str,
+    ) -> Result<String, ApiError> {
         let body = serde_json::json!({
             "base_tree": base_tree,
             "tree": blobs,
         });
 
         let resp = self.post("git/trees", &body).await?;
-        let data: ShaResponse = resp.json().await.map_err(|e| e.to_string())?;
+        let data: ShaResponse = resp
+            .json()
+            .await
+            .map_err(|e| ApiError::other(e.to_string()))?;
         Ok(data.sha)
     }
 
@@ -336,7 +395,7 @@ impl GitHubApi {
         tree: &str,
         parent: &str,
         message: &str,
-    ) -> Result<String, String> {
+    ) -> Result<String, ApiError> {
         let body = serde_json::json!({
             "parents": [parent],
             "message": message,
@@ -344,7 +403,10 @@ impl GitHubApi {
         });
 
         let resp = self.post("git/commits", &body).await?;
-        let data: GetCommitResponse = resp.json().await.map_err(|e| e.to_string())?;
+        let data: GetCommitResponse = resp
+            .json()
+            .await
+            .map_err(|e| ApiError::other(e.to_string()))?;
         Ok(data.sha)
     }
 
@@ -354,14 +416,17 @@ impl GitHubApi {
         git_ref: &str,
         sha: &str,
         force: bool,
-    ) -> Result<String, String> {
+    ) -> Result<String, ApiError> {
         let body = serde_json::json!({
             "sha": sha,
             "force": force,
         });
 
         let resp = self.patch(&format!("git/refs/{git_ref}"), &body).await?;
-        let data: UpdateRefResponse = resp.json().await.map_err(|e| e.to_string())?;
+        let data: UpdateRefResponse = resp
+            .json()
+            .await
+            .map_err(|e| ApiError::other(e.to_string()))?;
         Ok(data.object.sha)
     }
 }
@@ -381,6 +446,32 @@ mod tests {
         let result = build_commit_message("", "");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "Commit message is empty");
+    }
+
+    #[test]
+    fn test_api_error_is_permission_error() {
+        assert!(
+            ApiError {
+                status: Some(403),
+                message: "forbidden".into()
+            }
+            .is_permission_error()
+        );
+        assert!(
+            ApiError {
+                status: Some(404),
+                message: "not found".into()
+            }
+            .is_permission_error()
+        );
+        assert!(
+            !ApiError {
+                status: Some(422),
+                message: "unprocessable".into()
+            }
+            .is_permission_error()
+        );
+        assert!(!ApiError::other("network error").is_permission_error());
     }
 
     #[test]

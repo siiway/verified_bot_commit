@@ -67,6 +67,7 @@ were not committed by the Action will be left staged.
 | `no-retry`           | Boolean | Disable the retry mechanism during requests            | `false`                    |
 | `max-retries`        | Number  | Number of retries to attempt if a request fails        | `1`                        |
 | `follow-symlinks`    | Boolean | Follow symbolic links when globbing files              | `true`                     |
+| `skip-on-no-permission` | Boolean | Skip instead of failing when the token cannot push to the target ref [7] | `false`             |
 | `workspace`          | String  | Directory containing checked out files                 | `${{ github.workspace }}`  |
 | `api-url`            | String  | Base URL for the GitHub API                            | `${{ github.api_url }}`    |
 | `token`              | String  | GitHub Token for REST API access [6]                   | `${{ github.token }}`      |
@@ -90,15 +91,23 @@ were not committed by the Action will be left staged.
 >    to `ignore` if `allow-empty-commit` is `true`)
 > 6. This Action is intended to work with the default `GITHUB_TOKEN` or a
 >    GitHub App Token. See the [limitations](#limitations) section.
+> 7. Useful for pull requests opened from a fork, where the token may not be
+>    allowed to write to the head repository. When a permission error (HTTP
+>    `403`/`404`) occurs while creating the commit or moving the ref, the Action
+>    logs a warning and exits successfully instead of failing. The `skipped`
+>    output is set to `true` and `skip-reason` to `no-permission` so later steps
+>    can react accordingly.
 
 ### Outputs
 
-| Name     | Type   | Description                                       |
-| -------- | ------ | ------------------------------------------------- |
-| `blobs`  | JSON   | A JSON list of blob SHAs within the tree          |
-| `tree`   | String | SHA of the underlying tree for the commit         |
-| `commit` | String | SHA of the commit itself                          |
-| `ref`    | String | SHA for the ref that was updated (same as commit) |
+| Name          | Type    | Description                                                        |
+| ------------- | ------- | ----------------------------------------------------------------- |
+| `blobs`       | JSON    | A JSON list of blob SHAs within the tree                          |
+| `tree`        | String  | SHA of the underlying tree for the commit                        |
+| `commit`      | String  | SHA of the commit itself                                          |
+| `ref`         | String  | SHA for the ref that was updated (same as commit)                |
+| `skipped`     | Boolean | `true` when the ref update was skipped instead of pushed          |
+| `skip-reason` | String  | Reason the update was skipped, if any (e.g. `no-permission`)      |
 
 ### GITHUB_TOKEN Permissions
 

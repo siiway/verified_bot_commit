@@ -22,6 +22,7 @@ async fn run() -> Result<(), String> {
     let force_push = inputs::get_bool_input("force-push");
     let allow_empty_commit = inputs::get_bool_input("allow-empty-commit");
     let follow_symlinks = inputs::get_bool_input("follow-symlinks");
+    let skip_on_no_permission = inputs::get_bool_input("skip-on-no-permission");
     let workspace = inputs::get_input("workspace");
     let patterns = inputs::get_multiline_input("files");
 
@@ -95,72 +96,49 @@ async fn run() -> Result<(), String> {
         }
     }
 
-    // Create blobs for matching files
-    let mut blobs: Vec<git::GitBlob> = Vec::new();
+    // Select the files that match the configured patterns.
+    let matched_files: Vec<String> = changed_files
+        .into_iter()
+        .filter(|file| file_matches(file, &patterns))
+        .collect();
 
-    inputs::start_group("Creating Git Blobs...");
-    for file in &changed_files {
-        let mut matched = false;
-
-        for pattern in &patterns {
-            // Skip blank and comment patterns
-            if pattern.starts_with('#') || pattern.is_empty() {
-                continue;
-            }
-
-            // Negation pattern - skip file if it matches
-            if let Some(negated) = pattern.strip_prefix('!') {
-                if glob_match(negated, file) {
-                    break;
-                }
-                continue;
-            }
-
-            // Include file if it matches
-            if glob_match(pattern, file) {
-                matched = true;
-                break;
-            }
-        }
-
-        if matched {
-            let blob = api.create_blob(file, &workspace, follow_symlinks).await?;
-            inputs::info(&format!("{}\t{}", blob.sha, blob.path));
-            blobs.push(blob);
-        }
-    }
-    inputs::end_group();
-
-    let blob_shas: Vec<&str> = blobs.iter().map(|b| b.sha.as_str()).collect();
-    inputs::set_output(
-        "blobs",
-        &serde_json::to_string(&blob_shas).unwrap_or_default(),
-    );
-
-    // Create tree or reuse existing
-    let tree = if blobs.is_empty() {
+    // If nothing matches and we are not allowed to create an empty commit,
+    // there is nothing to do.
+    if matched_files.is_empty() && !allow_empty_commit {
         emit_no_commit_message(&no_commit_action, "No files to commit")?;
-        if !allow_empty_commit {
+        return Ok(());
+    }
+
+    // Create the commit on the server and move the ref. Any of these steps may
+    // fail with a permission error (e.g. a fork PR where the token cannot write
+    // to the head repository); handle that case gracefully when requested.
+    match create_commit_and_push(
+        &api,
+        &matched_files,
+        &workspace,
+        follow_symlinks,
+        &head_tree,
+        &head_commit,
+        &message,
+        &git_ref,
+        force_push,
+    )
+    .await
+    {
+        Ok(()) => {
+            inputs::set_output("skipped", "false");
+        }
+        Err(e) if skip_on_no_permission && e.is_permission_error() => {
+            inputs::warning(&format!(
+                "No permission to push to refs/{git_ref}; skipping ref update ({})",
+                e.message
+            ));
+            inputs::set_output("skipped", "true");
+            inputs::set_output("skip-reason", "no-permission");
             return Ok(());
         }
-        inputs::info(&format!("Reusing Git Tree @ {head_tree}"));
-        head_tree.clone()
-    } else {
-        let tree_sha = api.create_tree(&blobs, &head_tree).await?;
-        inputs::info(&format!("Created Git Tree @ {tree_sha}"));
-        tree_sha
-    };
-    inputs::set_output("tree", &tree);
-
-    // Create the signed commit
-    let commit = api.create_commit(&tree, &head_commit, &message).await?;
-    inputs::info(&format!("Created Commit @ {commit}"));
-    inputs::set_output("commit", &commit);
-
-    // Update the ref
-    let ref_sha = api.update_ref(&git_ref, &commit, force_push).await?;
-    inputs::info(&format!("Updated refs/{git_ref} to point to {ref_sha}"));
-    inputs::set_output("ref", &ref_sha);
+        Err(e) => return Err(e.message),
+    }
 
     // Update local ref
     if update_local {
@@ -196,6 +174,90 @@ async fn run() -> Result<(), String> {
     Ok(())
 }
 
+/// Whether a file matches the configured include/negation glob patterns.
+fn file_matches(file: &str, patterns: &[String]) -> bool {
+    for pattern in patterns {
+        // Skip blank and comment patterns
+        if pattern.starts_with('#') || pattern.is_empty() {
+            continue;
+        }
+
+        // Negation pattern - skip file if it matches
+        if let Some(negated) = pattern.strip_prefix('!') {
+            if glob_match(negated, file) {
+                return false;
+            }
+            continue;
+        }
+
+        // Include file if it matches
+        if glob_match(pattern, file) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Create the blobs, tree and commit on the server and move the target ref.
+///
+/// Returns a [`git::ApiError`] so the caller can distinguish permission
+/// failures (e.g. pushing to a fork the token cannot write to) from other
+/// errors. Outputs (`blobs`, `tree`, `commit`, `ref`) are set as each step
+/// succeeds.
+#[allow(clippy::too_many_arguments)]
+async fn create_commit_and_push(
+    api: &git::GitHubApi,
+    matched_files: &[String],
+    workspace: &str,
+    follow_symlinks: bool,
+    head_tree: &str,
+    head_commit: &str,
+    message: &str,
+    git_ref: &str,
+    force_push: bool,
+) -> Result<(), git::ApiError> {
+    // Create blobs for matching files
+    let mut blobs: Vec<git::GitBlob> = Vec::new();
+
+    inputs::start_group("Creating Git Blobs...");
+    for file in matched_files {
+        let blob = api.create_blob(file, workspace, follow_symlinks).await?;
+        inputs::info(&format!("{}\t{}", blob.sha, blob.path));
+        blobs.push(blob);
+    }
+    inputs::end_group();
+
+    let blob_shas: Vec<&str> = blobs.iter().map(|b| b.sha.as_str()).collect();
+    inputs::set_output(
+        "blobs",
+        &serde_json::to_string(&blob_shas).unwrap_or_default(),
+    );
+
+    // Create tree or reuse existing
+    let tree = if blobs.is_empty() {
+        inputs::info(&format!("Reusing Git Tree @ {head_tree}"));
+        head_tree.to_string()
+    } else {
+        let tree_sha = api.create_tree(&blobs, head_tree).await?;
+        inputs::info(&format!("Created Git Tree @ {tree_sha}"));
+        tree_sha
+    };
+    inputs::set_output("tree", &tree);
+
+    // Create the signed commit
+    let commit = api.create_commit(&tree, head_commit, message).await?;
+    inputs::info(&format!("Created Commit @ {commit}"));
+    inputs::set_output("commit", &commit);
+
+    // Update the ref
+    let ref_sha = api.update_ref(git_ref, &commit, force_push).await?;
+    inputs::info(&format!("Updated refs/{git_ref} to point to {ref_sha}"));
+    inputs::set_output("ref", &ref_sha);
+
+    Ok(())
+}
+
 fn emit_no_commit_message(action: &str, msg: &str) -> Result<(), String> {
     match action {
         "error" => Err(msg.to_string()),
@@ -211,5 +273,33 @@ fn emit_no_commit_message(action: &str, msg: &str) -> Result<(), String> {
             inputs::info(msg);
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_file_matches_include() {
+        let patterns = vec!["**/*.py".to_string(), "*.py".to_string()];
+        assert!(file_matches("main.py", &patterns));
+        assert!(file_matches("src/app.py", &patterns));
+        assert!(!file_matches("README.md", &patterns));
+    }
+
+    #[test]
+    fn test_file_matches_negation() {
+        // First matching pattern wins, so the negation must precede the include.
+        let patterns = vec!["!**/migrations/*.py".to_string(), "**/*.py".to_string()];
+        assert!(file_matches("app/models.py", &patterns));
+        assert!(!file_matches("app/migrations/0001.py", &patterns));
+    }
+
+    #[test]
+    fn test_file_matches_ignores_comments_and_blanks() {
+        let patterns = vec!["# a comment".to_string(), String::new(), "*.rs".to_string()];
+        assert!(file_matches("lib.rs", &patterns));
+        assert!(!file_matches("lib.py", &patterns));
     }
 }

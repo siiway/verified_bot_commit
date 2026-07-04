@@ -22,16 +22,26 @@ pub fn get_multiline_input(name: &str) -> Vec<String> {
 }
 
 /// Set a GitHub Actions output value.
+///
+/// Uses the `GITHUB_OUTPUT` environment file (the `::set-output` workflow
+/// command is deprecated). Values are written with a heredoc delimiter so that
+/// multi-line content is handled correctly.
 pub fn set_output(name: &str, value: &str) {
-    println!("::set-output name={name}::{value}");
-
-    // Also write to GITHUB_OUTPUT file if available
     if let Ok(output_file) = env::var("GITHUB_OUTPUT") {
         use std::io::Write;
         if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(&output_file) {
-            let _ = writeln!(file, "{name}={value}");
+            // Pick a delimiter that cannot appear in the value.
+            let mut delimiter = format!("ghadelimiter_{name}");
+            while value.contains(&delimiter) {
+                delimiter.push('_');
+            }
+            let _ = writeln!(file, "{name}<<{delimiter}\n{value}\n{delimiter}");
+            return;
         }
     }
+
+    // Fallback for environments without GITHUB_OUTPUT (e.g. local runs).
+    println!("{name}={value}");
 }
 
 /// Log an info message.
