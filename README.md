@@ -8,7 +8,7 @@ A GitHub Action to create signed and verified commits as the
 GitHub App Token. Written in Rust for fast, dependency-free execution.
 
 This is accomplished via the GitHub [REST API] by using the [Blob] and [Tree]
-endpoints to build the commit and update the original ref to point to it.[^1]
+endpoints to build the commit and update the original ref to point to it.[^git-objects]
 
 This Action will stage all changed files in your local branch and add those that
 match your file patterns to the commit. Afterwards, your local branch will be
@@ -53,26 +53,26 @@ were not committed by the Action will be left staged.
 
 | Name                 | Type    | Description                                            | Default                    |
 | -------------------- | ------- | ------------------------------------------------------ | -------------------------- |
-| `repository`         | String  | The target repository [1]                              | `${{ github.event.pull_request.head.repo.full_name || github.repository }}` |
-| `ref`                | String  | The ref to push the commit to                          | `${{ github.head_ref || github.ref }}` |
-| `files`              | List    | Files/[Glob] patterns to include with the commit [2]   | _required_                 |
-| `message`            | String  | Message for the commit [3]                             | _optional_                 |
-| `message-file`       | String  | File to use for the commit message [3]                 | _optional_                 |
-| `auto-stage`         | Boolean | Stage all changed files for committing [4]             | `true`                     |
-| `update-local`       | Boolean | Update local branch after committing [4]               | `true`                     |
+| `repository`         | String  | The target repository [^1]                              | `${{ github.event.pull_request.head.repo.full_name \|\| github.repository }}` |
+| `ref`                | String  | The ref to push the commit to                          | `${{ github.head_ref \|\| github.ref }}` |
+| `files`              | List    | Files/[Glob] patterns to include with the commit [^2]   | _required_                 |
+| `message`            | String  | Message for the commit [^3]                             | _optional_                 |
+| `message-file`       | String  | File to use for the commit message [^3]                 | _optional_                 |
+| `auto-stage`         | Boolean | Stage all changed files for committing [^4]             | `true`                     |
+| `update-local`       | Boolean | Update local branch after committing [^4]               | `true`                     |
 | `force-push`         | Boolean | Force push the commit                                  | `false`                    |
-| `if-no-commit`       | String  | Set the behavior when no commit is made [5]            | `warning`                  |
+| `if-no-commit`       | String  | Set the behavior when no commit is made [^5]            | `warning`                  |
 | `allow-empty-commit` | Boolean | Allow creating an empty commit if there are no changes | `false`                    |
 | `no-throttle`        | Boolean | Disable the throttling mechanism during requests       | `false`                    |
 | `no-retry`           | Boolean | Disable the retry mechanism during requests            | `false`                    |
 | `max-retries`        | Number  | Number of retries to attempt if a request fails        | `1`                        |
 | `follow-symlinks`    | Boolean | Follow symbolic links when globbing files              | `true`                     |
-| `skip-on-no-permission` | Boolean | Skip instead of failing when the token cannot push to the target ref [7] | `false`             |
+| `skip-on-no-permission` | Boolean | Skip instead of failing when the token cannot push to the target ref [^6] | `false`             |
 | `workspace`          | String  | Directory containing checked out files                 | `${{ github.workspace }}`  |
 | `api-url`            | String  | Base URL for the GitHub API                            | `${{ github.api_url }}`    |
-| `token`              | String  | GitHub Token for REST API access [6]                   | `${{ github.token }}`      |
+| `token`              | String  | GitHub Token for REST API access [^7]                   | `${{ github.token }}`      |
 
-> 1. Must be in the format `owner/repo-name`. To push to other repositories you
+> [^1]: Must be in the format `owner/repo-name`. To push to other repositories you
 >    will _need_ to use a GitHub App Token. On `pull_request` events the default
 >    points at the head repository (`github.event.pull_request.head.repo.full_name`)
 >    so the action targets the repo that actually contains the branch. For PRs
@@ -82,21 +82,21 @@ were not committed by the Action will be left staged.
 >    `GITHUB_TOKEN`. To commit back to a fork you need a GitHub App Token or a
 >    maintainer's PAT with write access to the head repo (and note that "Allow
 >    edits by maintainers" does not work for forks owned by an organization).
-> 2. Files within your `.gitignore` will not be included. You can also negate
+> [^2]: Files within your `.gitignore` will not be included. You can also negate
 >    any files by prefixing it with `!`
-> 3. You must include either `message` or `message-file` (which takes priority).
-> 4. Only files that match a pattern you include will be in the final commit,
+> [^3]: You must include either `message` or `message-file` (which takes priority).
+> [^4]: Only files that match a pattern you include will be in the final commit,
 >    but you can optionally stage files yourself for more control.
-> 5. Available options are `info`, `notice`, `warning` and `error`. (Will be set
+> [^5]: Available options are `info`, `notice`, `warning` and `error`. (Will be set
 >    to `ignore` if `allow-empty-commit` is `true`)
-> 6. This Action is intended to work with the default `GITHUB_TOKEN` or a
->    GitHub App Token. See the [limitations](#limitations) section.
-> 7. Useful for pull requests opened from a fork, where the token may not be
+> [^6]: Useful for pull requests opened from a fork, where the token may not be
 >    allowed to write to the head repository. When a permission error (HTTP
 >    `403`/`404`) occurs while creating the commit or moving the ref, the Action
 >    logs a warning and exits successfully instead of failing. The `skipped`
 >    output is set to `true` and `skip-reason` to `no-permission` so later steps
 >    can react accordingly.
+> [^7]: This Action is intended to work with the default `GITHUB_TOKEN` or a
+>    GitHub App Token. See the [limitations](#limitations) section.
 
 ### Outputs
 
@@ -280,7 +280,7 @@ originally written in TypeScript.
 
 <!-- Links -->
 
-[^1]: [Git Internals - Git Objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects)
+[^git-objects]: [Git Internals - Git Objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects)
 
 [REST API]: https://docs.github.com/en/rest
 [Personal Access Token (PAT)]: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
