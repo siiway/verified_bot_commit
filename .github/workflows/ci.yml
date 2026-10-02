@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo test
+      - run: python3 tests/action_download_test.py
 
   fmt:
     name: Format
