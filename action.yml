@@ -108,7 +108,7 @@ runs:
   - name: Download verified-bot-commit
     shell: bash
     run: |
-      VERSION="v0.2.0"
+      VERSION="v0.2.1"
       BASE_URL="https://github.com/siiway/verified_bot_commit/releases/download/${VERSION}"
 
       case "$RUNNER_OS-$RUNNER_ARCH" in
@@ -122,12 +122,16 @@ runs:
 
       ARCHIVE="verified_bot_commit-${TARGET}"
       if [ "$RUNNER_OS" = "Windows" ]; then
-        curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o archive.zip
-        unzip -o archive.zip -d "$RUNNER_TEMP"
+        ARCHIVE_PATH="$RUNNER_TEMP/${ARCHIVE}.zip"
+        trap 'rm -f "$ARCHIVE_PATH"' EXIT
+        curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o "$ARCHIVE_PATH"
+        unzip -o "$ARCHIVE_PATH" -d "$RUNNER_TEMP"
         BINARY="$RUNNER_TEMP/verified_bot_commit.exe"
       else
-        curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o archive.tar.gz
-        tar -xzf archive.tar.gz -C "$RUNNER_TEMP"
+        ARCHIVE_PATH="$RUNNER_TEMP/${ARCHIVE}.tar.gz"
+        trap 'rm -f "$ARCHIVE_PATH"' EXIT
+        curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o "$ARCHIVE_PATH"
+        tar -xzf "$ARCHIVE_PATH" -C "$RUNNER_TEMP"
         BINARY="$RUNNER_TEMP/verified_bot_commit"
         chmod +x "$BINARY"
       fi
