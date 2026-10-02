@@ -123,15 +123,15 @@ runs:
       ARCHIVE="verified_bot_commit-${TARGET}"
       if [ "$RUNNER_OS" = "Windows" ]; then
         ARCHIVE_PATH="$RUNNER_TEMP/${ARCHIVE}.zip"
+        trap 'rm -f "$ARCHIVE_PATH"' EXIT
         curl -fsSL "${BASE_URL}/${ARCHIVE}.zip" -o "$ARCHIVE_PATH"
         unzip -o "$ARCHIVE_PATH" -d "$RUNNER_TEMP"
-        rm -f "$ARCHIVE_PATH"
         BINARY="$RUNNER_TEMP/verified_bot_commit.exe"
       else
         ARCHIVE_PATH="$RUNNER_TEMP/${ARCHIVE}.tar.gz"
+        trap 'rm -f "$ARCHIVE_PATH"' EXIT
         curl -fsSL "${BASE_URL}/${ARCHIVE}.tar.gz" -o "$ARCHIVE_PATH"
         tar -xzf "$ARCHIVE_PATH" -C "$RUNNER_TEMP"
-        rm -f "$ARCHIVE_PATH"
         BINARY="$RUNNER_TEMP/verified_bot_commit"
         chmod +x "$BINARY"
       fi
