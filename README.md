@@ -126,8 +126,8 @@ writing to other repositories, etc.
 ## Versioning
 
 - `v0` → latest stable v0 release
-- `v0.1` → latest v0.1.x release
-- `v0.1.1` → pinned release
+- `v0.2` → latest v0.2.x release
+- `v0.2.0` → pinned release
 
 ## Examples
 
@@ -257,8 +257,8 @@ cargo test
 
 1. Tag a new version:
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.1
+   git push origin v0.2.1
    ```
 2. The [Release](.github/workflows/release.yml) workflow will build binaries for
    all platforms and create a GitHub Release automatically.
