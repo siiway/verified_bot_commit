@@ -1,6 +1,6 @@
 [package]
 name = "verified_bot_commit"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "GitHub Action for creating signed and verified bot commits"
 license = "GPL-3.0"
